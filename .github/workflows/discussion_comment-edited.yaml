@@ -12,14 +12,14 @@ jobs:
       - name: Event context info
         run: |
           cat <<EOF
-          github: ${{github}}
-          env: ${{env}}
-          vars: ${{vars}}
-          job: ${{job}}
-          steps: ${{steps}}
-          runner: ${{runner}}
-          secrets: ${{secrets}}
-          strategy: ${{strategy}}
-          matrix: ${{matrix}}
-          needs: ${{needs}}
-          inputs: ${{inputs}}
+          github: ${{toJSON(github)}}
+          env: ${{toJSON(env)}}
+          vars: ${{toJSON(vars)}}
+          job: ${{toJSON(job)}}
+          steps: ${{toJSON(steps)}}
+          runner: ${{toJSON(runner)}}
+          secrets: ${{toJSON(secrets)}}
+          strategy: ${{toJSON(strategy)}}
+          matrix: ${{toJSON(matrix)}}
+          needs: ${{toJSON(needs)}}
+          inputs: ${{toJSON(inputs)}}
