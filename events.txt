@@ -24,9 +24,7 @@ push
 registry_package published updated
 release published unpublished created edited deleted prereleased released
 repository_dispatch
-schedule
 status
 watch started
 workflow_call
 workflow_dispatch
-workflow_run completed requested in_progress
