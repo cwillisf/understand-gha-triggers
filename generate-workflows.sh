@@ -47,6 +47,7 @@ make_workflow () {
 		echo "          matrix: \${{toJSON(matrix)}}"
 		echo "          needs: \${{toJSON(needs)}}"
 		echo "          inputs: \${{toJSON(inputs)}}"
+		echo "          EOF"
 	) > ".github/workflows/${workflow_id}.yaml"
 }
 
