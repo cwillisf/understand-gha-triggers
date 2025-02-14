@@ -251,3 +251,133 @@ The event with `types: [labeled]` receives:
 `label` | object | Label object
 `number` | number | PR number
 `pull_request` | object | PR object (see above)
+
+### Change PR target branch
+
+In this case, the PR was changed from `main` to `another-base`.
+
+This triggered two workflows:
+
+1. `pull_request_target` with action `edited`
+2. `pull_request` with action `edited`
+
+#### Change PR target branch: `pull_request_target` event
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/heads/another-base"`
+`sha` | string | Git SHA of the new base branch
+`head_ref` | string | `"example-branch"`
+`base_ref` | string | `"another-base"`
+`event_name` | string | `"pull_request_target"`
+`ref_name` | string | `"another-base"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`action` | string | `"edited"`
+`changes` | object | Changes object with a `"base"` property
+`number` | number | PR number
+`pull_request` | object | PR object (see above)
+
+#### Change PR target branch: `pull_request` event
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/pull/2/merge"`
+`sha` | string | Git SHA of the new (proposed) PR merge commit
+`head_ref` | string | `"example-branch"`
+`base_ref` | string | `"another-base"`
+`event_name` | string | `"pull_request"`
+`ref_name` | string | `"2/merge"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`action` | string | `"edited"`
+`changes` | object | Changes object with a `"base"` property
+`number` | number | PR number
+`pull_request` | object | PR object (see above)
+
+### Push to a pull request branch
+
+In this case, I pushed a commit to `example-branch` while a PR was open, proposing to merge `example-branch` into
+`another-base`.
+
+This triggered several workflows, in this order:
+
+1. `push`
+2. `pull_request_target` with no action filter
+3. `pull_request_target` with action `synchronize`
+4. `pull_request` with no action filter
+5. `pull_request` with action `synchronize`
+
+All of these receive a `github.event` containing the same `push` object:
+
+#### Push to a pull request branch: `push` event
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/heads/example-branch"`
+`sha` | string | Git SHA of the commit that was pushed
+`head_ref` | string | `""` (empty string)
+`base_ref` | string | `""` (empty string)
+`event_name` | string | `"push"`
+`ref_name` | string | `"example-branch"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`after` | string | Git SHA of the branch after the push = Git SHA of the commit that was pushed
+`base_ref` | string | `null`
+`before` | string | Git SHA of the branch before the push
+`commits` | array | Array of commit objects that were pushed
+`compare` | string | URL to compare before and after the push
+`forced` | boolean | Whether the push was forced
+`head_commit` | object | Commit object of the head commit
+`pusher` | object | Pusher object (name, email)
+`ref` | string | `"refs/heads/example-branch"`
+
+#### Push to a pull request branch: `pull_request_target` events
+
+Both `pull_request_target` workflows receive generally the same information:
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/heads/another-base"`
+`sha` | string | Git SHA of the base branch
+`head_ref` | string | `"example-branch"`
+`base_ref` | string | `"another-base"`
+`event_name` | string | `"pull_request_target"`
+`ref_name` | string | `"another-base"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`action` | string | `"synchronize"`
+`after` | string | Git SHA of the branch after the push = Git SHA of the commit that was pushed
+`before` | string | Git SHA of the branch before the push
+`number` | number | PR number
+`pull_request` | object | PR object (see above)
+
+#### Push to a pull request branch: `pull_request` events
+
+Both `pull_request` workflows receive generally the same information:
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/pull/2/merge"`
+`sha` | string | Git SHA of the (proposed) PR merge commit
+`head_ref` | string | `"example-branch"`
+`base_ref` | string | `"another-base"`
+`event_name` | string | `"pull_request"`
+`ref_name` | string | `"2/merge"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`action` | string | `"synchronize"`
+`after` | string | Git SHA of the branch after the push = Git SHA of the commit that was pushed
+`before` | string | Git SHA of the branch before the push
+`number` | number | PR number
+`pull_request` | object | PR object (see above)
