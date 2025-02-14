@@ -1,0 +1,26 @@
+name: pull_request_target-closed
+
+on:
+  pull_request_target:
+    types: [closed]
+
+jobs:
+  foo:
+    name: pull_request_target-closed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Event context info
+        run: |
+          cat <<EOF
+          github: ${{github}}
+          env: ${{env}}
+          vars: ${{vars}}
+          job: ${{job}}
+          jobs: ${{jobs}}
+          steps: ${{steps}}
+          runner: ${{runner}}
+          secrets: ${{secrets}}
+          strategy: ${{strategy}}
+          matrix: ${{matrix}}
+          needs: ${{needs}}
+          inputs: ${{inputs}}

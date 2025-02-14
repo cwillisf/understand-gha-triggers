@@ -1,0 +1,26 @@
+name: issues-milestoned
+
+on:
+  issues:
+    types: [milestoned]
+
+jobs:
+  foo:
+    name: issues-milestoned
+    runs-on: ubuntu-latest
+    steps:
+      - name: Event context info
+        run: |
+          cat <<EOF
+          github: ${{github}}
+          env: ${{env}}
+          vars: ${{vars}}
+          job: ${{job}}
+          jobs: ${{jobs}}
+          steps: ${{steps}}
+          runner: ${{runner}}
+          secrets: ${{secrets}}
+          strategy: ${{strategy}}
+          matrix: ${{matrix}}
+          needs: ${{needs}}
+          inputs: ${{inputs}}

@@ -1,0 +1,25 @@
+name: pull_request
+
+on:
+  pull_request:
+
+jobs:
+  foo:
+    name: pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Event context info
+        run: |
+          cat <<EOF
+          github: ${{github}}
+          env: ${{env}}
+          vars: ${{vars}}
+          job: ${{job}}
+          jobs: ${{jobs}}
+          steps: ${{steps}}
+          runner: ${{runner}}
+          secrets: ${{secrets}}
+          strategy: ${{strategy}}
+          matrix: ${{matrix}}
+          needs: ${{needs}}
+          inputs: ${{inputs}}

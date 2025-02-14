@@ -1,0 +1,26 @@
+name: issues-unassigned
+
+on:
+  issues:
+    types: [unassigned]
+
+jobs:
+  foo:
+    name: issues-unassigned
+    runs-on: ubuntu-latest
+    steps:
+      - name: Event context info
+        run: |
+          cat <<EOF
+          github: ${{github}}
+          env: ${{env}}
+          vars: ${{vars}}
+          job: ${{job}}
+          jobs: ${{jobs}}
+          steps: ${{steps}}
+          runner: ${{runner}}
+          secrets: ${{secrets}}
+          strategy: ${{strategy}}
+          matrix: ${{matrix}}
+          needs: ${{needs}}
+          inputs: ${{inputs}}
