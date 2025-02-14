@@ -40,7 +40,6 @@ make_workflow () {
 		echo "          env: \${{env}}"
 		echo "          vars: \${{vars}}"
 		echo "          job: \${{job}}"
-		echo "          jobs: \${{jobs}}"
 		echo "          steps: \${{steps}}"
 		echo "          runner: \${{runner}}"
 		echo "          secrets: \${{secrets}}"

@@ -16,7 +16,6 @@ jobs:
           env: ${{env}}
           vars: ${{vars}}
           job: ${{job}}
-          jobs: ${{jobs}}
           steps: ${{steps}}
           runner: ${{runner}}
           secrets: ${{secrets}}
