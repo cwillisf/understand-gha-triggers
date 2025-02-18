@@ -4,6 +4,46 @@ This repository is an attempt to better understand the details of triggering Git
 
 ## How can I ...?
 
+### Quickly set up GHA without reading all of this?
+
+It depends on how many builds you want to run. Do you have a limited GHA budget for the repo in question?
+
+#### Luxury
+
+This is nice if your builds aren't limited: it'll check every pushed commit, as well as the proposed merge for each
+pull request. If you push a commit before the workflows finish, it'll cancel the one checking the proposed merge
+(since that's no longer the active proposal) but it'll continue the check on the previously-pushed commit.
+
+```yaml
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }} @ ${{ github.head_ref || github.sha }}
+```
+
+#### Minimal
+
+You might want this if you'd like to limit builds as much as possible but maintain safety around your main branch(es).
+This will only check pushes and pull requests that target your main branch. New workflows will cancel old ones for the
+same branch or PR.
+
+```yaml
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }} @ ${{ github.head_ref || github.ref_name }}
+```
+
 ### Run a workflow on push and pull request events without duplicates?
 
 I want to run a build-and-test workflow in what seems like two categories of events:
@@ -79,13 +119,14 @@ name: that's `github.ref_name` (not `github.ref`!) in the `push` event and `gith
 
 All things considered, I have two recommendations for this scenario:
 
-1. You can run the workflow on both `push` and `pull_request` events, and use something like this for your concurrency
-   group: `${{ github.workflow }} @ ${{ github.head_ref || github.ref }}`
-2. Consider running on both events anyway, since they're not actually testing the same thing: the `push` event tests
-   the branch by itself, and the `pull_request` event tests the merge result. In that case, you could use something
-   like this as your concurrency group: `${{ github.workflow }} @ ${{ github.ref }}`.
-
-The concurrency group expression from (1) may look familiar: it's a common recommendation. But now I understand why!
+1. You can run the workflow on "either" `push` or `pull_request` events by running on both and using something like
+   `${{ github.workflow }} @ ${{ github.head_ref || github.ref_name }}` for your concurrency group. That'll force a
+   PR's proposed merge commit to take precedence. Optionally, filter `push`, `pull_request`, or both events to
+   specific branches.
+2. Consider actually running on both events, since they're not actually testing the same thing: the `push` event tests
+   the branch by itself, and the `pull_request` event tests the result of the proposed merge. In that case, you could
+   use something like `${{ github.workflow }} @ ${{ github.ref }}` or `${{ github.workflow }} @ ${{ github.head_ref ||
+   github.sha }}` as your concurrency group.
 
 ## Generated workflows
 
