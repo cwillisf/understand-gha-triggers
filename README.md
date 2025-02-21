@@ -507,3 +507,13 @@ Both `pull_request` workflows receive generally the same information:
 `before` | string | Git SHA of the branch before the push
 `number` | number | PR number
 `pull_request` | object | PR object (see above)
+
+## Merge a pull request through a merge queue
+
+A merge queue can generate checks on commits other than the head and merge commits of a PR. Behind the scenes, GitHub
+creates a temporary branch to hold the merge result, then triggers the `merge_group` event on that branch. Of course,
+creating that branch also triggers other events, so depending on how the concurrency groups are set up, these events
+can cancel each other. If the `merge_group` event is canceled, that's considered a failure, causing the merge to be
+evicted from the queue.
+
+Setup: the `merge_group-checks-requested
