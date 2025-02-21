@@ -8,40 +8,47 @@ This repository is an attempt to better understand the details of triggering Git
 
 It depends on how many builds you want to run. Do you have a limited GHA budget for the repo in question?
 
+WARNING: Merge queues throw a wrench into the previous advice. These recommendations have been updated accordingly.
+See further down for more detail.
+
 #### Luxury
 
 This is nice if your builds aren't limited: it'll check every pushed commit, as well as the proposed merge for each
 pull request. If you push a commit before the workflows finish, it'll cancel the one checking the proposed merge
-(since that's no longer the active proposal) but it'll continue the check on the previously-pushed commit.
+(since that's no longer the active proposal) but it'll continue the check on the previously-pushed commit. Merge queue
+checks are treated separately, and won't be canceled by other activity.
 
 ```yaml
 on:
-  push:
+  merge_group:
   pull_request:
+  push:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }} @ ${{ github.head_ref || github.sha }}
+  group: ${{ github.workflow }} @ ${{ github.event.compare || github.head_ref || github.ref }}
 ```
 
 #### Minimal
 
 You might want this if you'd like to limit builds as much as possible but maintain safety around your main branch(es).
 This will only check pushes and pull requests that target your main branch. New workflows will cancel old ones for the
-same branch or PR.
+same branch or PR. Merge queue checks are treated separately, and won't be canceled by other activity. (It would be
+nice to cancel PR merge checks in favor of merge queue checks, but that doesn't appear to be possible.)
 
 ```yaml
 on:
-  push:
+  merge_group:
+  pull_request:
     branches:
       - main
-  pull_request:
+  push:
     branches:
       - main
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }} @ ${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }} @ ${{ github.head_ref || github.ref }}
 ```
 
 ### Run a workflow on push and pull request events without duplicates?
@@ -127,6 +134,56 @@ All things considered, I have two recommendations for this scenario:
    the branch by itself, and the `pull_request` event tests the result of the proposed merge. In that case, you could
    use something like `${{ github.workflow }} @ ${{ github.ref }}` or `${{ github.workflow }} @ ${{ github.head_ref ||
    github.sha }}` as your concurrency group.
+
+### Run a workflow on push, pull request, and merge queue checks without duplicates?
+
+The recommendation above, configuring the workflow to run on both `push` and `pull_request` events with a concurrency
+group like `${{ github.workflow }} @ ${{ github.head_ref || github.sha }}`, does not work as expected if the same
+workflow also handles `merge_group` events. The `push` event will cancel the `merge_group` event, which sets up a race
+condition: if GitHub checks the status after that cancellation but before the `merge_group` workflow registers itself,
+then the cancellation will be considered a failure and the merge will be evicted from the queue. Oops!
+
+The best solution is to use a different concurrency group for the `merge_group` event. Here's the _ideal_ goal:
+
+- For `push` events, use a unique concurrency group for each commit.
+- For `pull_request` events, use a unique concurrency group for each PR. Newer `pull_request` events for a PR should
+  cancel older ones for the same PR.
+- For `merge_group` events, use a unique concurrency group for each PR (but different from the `pull_request` group).
+  Newer `merge_group` events for a PR should cancel older ones for the same PR.
+- It's NOT acceptable for `push` events to cancel `merge_group` events. (It might be acceptable for `merge_group`
+  events to cancel `push` events, but I'm not sure. I haven't yet set up a test for this.)
+
+Good candidates for each:
+
+- `push` events: `github.sha`, `github.event.compare`
+- `pull_request` events: `github.ref`, `github.ref_name`, `github.event.pull_request.head.ref`,
+  `github.event.pull_request.html_url`
+- `merge_group` events: Hmmmmm...
+
+Unfortunately, the `merge_group` event doesn't include anything quite like what we need. The closest options are
+`github.ref`, which is the same as `github.event.merge_group.head_ref`, and `github.ref_name`, which is similar. These
+vary with both the PR and target branch head commit SHA, since the target head SHA is part of the temporary branch
+name. At least it's not quite as unique as `github.sha`.
+
+By the way, this also means that if, for example, PR1 is in the queue before PR2, and PR1 fails so PR2 gets a new
+merge commit, the old PR2 workflow is difficult to cancel. See here for a somewhat heavy solution:
+<https://github.com/marketplace/actions/cancel-previous-runs-action>
+
+Anyway, given the candidates above, I recommend flipping it all around. Treat `push` as the unique situation, and use
+`head_ref` for "all the other" events. Unfortunately, `pull_request` and `merge_group` put their `head_ref` values in
+different places... fortunately(?) that place is `ref` for `merge_group`, which is a reasonable fallback for other
+events. All together, that leads to something like this:
+
+```yaml
+on:
+  merge_group:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }} @ ${{ github.event.compare || github.head_ref || github.ref }}
+```
 
 ## Generated workflows
 
@@ -516,4 +573,161 @@ creating that branch also triggers other events, so depending on how the concurr
 can cancel each other. If the `merge_group` event is canceled, that's considered a failure, causing the merge to be
 evicted from the queue.
 
-Setup: the `merge_group-checks-requested
+Setup:
+
+1. Create a rule set or classic branch protection rule:
+   - Enable status checks and add at least one check (I used `push.yml` for this test)
+   - Enable merge queues
+2. Add a 30-second sleep to `merge_group-checks-requested.yml` to make it take long enough to complicate merging
+3. Create two PRs (#7 and #8) targeting `main`
+4. Merge them both at about the same time
+
+This created quite a few events. Note that the events were not quite exactly duplicated for the two PRs.
+
+1. `pull_request-enqueued` for PR #7
+2. `pull_request-enqueued` for PR #8
+3. `merge_group` for PR #7
+4. `merge_group-checks-requested` for PR #7
+5. `merge_group` for PR #8
+6. `merge_group-checks-requested` for PR #8
+7. `push` for the temporary branch for PR #7
+8. `create` for the temporary branch for PR #7
+   - presumably this actually happened before the push, but this is how it was displayed in the event list!
+9. `create` for the temporary branch for PR #8
+10. `push` for the temporary branch for PR #8
+11. `push` for the target branch, associated with PR #8
+12. `pull_request-closed` for PR #7
+13. `pull_request-closed` for PR #8
+14. `pull_request_target-closed` for PR #8
+15. `pull_request_target-closed` for PR #7
+16. `delete` for the temporary branch for PR #8
+17. `pull_request-dequeued` for PR #7
+18. `pull_request-dequeued` for PR #8
+19. `delete` for the temporary branch for PR #7
+
+A few observations:
+
+- The relative order of events related to the two PRs is not guaranteed.
+- The relative order of events related to each PR is, surprisingly, also not guaranteed.
+- There was no `push` event for the target branch associated with PR #7, even though it was merged.
+- The `push` events on the temporary branches happened after the `merge_group` events, so if they share a concurrency
+  group, the `push` events will cancel the `merge_group` events. (This counts as a failure and can evict the merge
+  from the queue!)
+
+Select event details:
+
+### `pull_request-enqueued` for PR #8
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/pull/8/merge"`
+`sha` | string | Git SHA of a merge commit merging PR #8 into `main`
+`head_ref` | string | the source branch name of PR #8
+`base_ref` | string | `"main"`
+`event_name` | string | `"pull_request"`
+`ref_name` | string | `"8/merge"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`action` | string | `"enqueued"`
+`number` | number | PR number = 8
+`pull_request` | object | PR object (see above)
+
+### `merge_group` for PR #7
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/heads/gh-readonly-queue/main/pr-7-d49b56145b99c35fcabcbdc1293bfe4500a660f8"`
+`sha` | string | Git SHA of the merge commit for this PR, which was later pushed to `main` = `"061c9387c245a237e608cffb69999a9e564d2ffa"`
+`head_ref` | string | `""` (empty string)
+`base_ref` | string | `""` (empty string)
+`event_name` | string | `"merge_group"`
+`ref_name` | string | `"gh-readonly-queue/main/pr-7-d49b56145b99c35fcabcbdc1293bfe4500a660f8"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`action` | string | `"checks_requested"`
+`merge_group` | object | Merge group object (see below)
+
+`github.event.merge_group` property | Type | Value
+--- | --- | ---
+`base_ref` | string | `"refs/heads/main"`
+`base_sha` | string | Git SHA of `main` (first parent of the merge commit) = `"d49b56145b99c35fcabcbdc1293bfe4500a660f8"`
+`head_commit` | object | Commit object corresponding to `head_sha`
+`head_ref` | string | `"refs/head/gh-readonly-queue/main/pr-7-d49b56145b99c35fcabcbdc1293bfe4500a660f8"`
+`head_sha` | string | Same as `github.sha` = `"061c9387c245a237e608cffb69999a9e564d2ffa"`
+
+### `merge_group` for PR #8
+
+Note that for this event, `github.ref` does NOT end with the same hash as `github.sha`.
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/heads/gh-readonly-queue/main/pr-8-061c9387c245a237e608cffb69999a9e564d2ffa"`
+`sha` | string | Git SHA of the merge commit for PR #8 on top of PR #7, which was later pushed to `main` = `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+`head_ref` | string | `""` (empty string)
+`base_ref` | string | `""` (empty string)
+`event_name` | string | `"merge_group"`
+`ref_name` | string | `"gh-readonly-queue/main/pr-8-061c9387c245a237e608cffb69999a9e564d2ffa"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`action` | string | `"checks_requested"`
+`merge_group` | object | Merge group object (see below)
+
+`github.event.merge_group` property | Type | Value
+--- | --- | ---
+`base_ref` | string | `"refs/heads/main"`
+`base_sha` | string | Git SHA of PR #7's merge commit = `"061c9387c245a237e608cffb69999a9e564d2ffa"`
+`head_commit` | object | Commit object corresponding to `head_sha`
+`head_ref` | string | `"refs/heads/gh-readonly-queue/main/pr-8-061c9387c245a237e608cffb69999a9e564d2ffa"`
+`head_sha` | string | Same as `github.sha` = `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+
+### `push` for the temporary branch for PR #8
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/heads/gh-readonly-queue/main/pr-8-061c9387c245a237e608cffb69999a9e564d2ffa"`
+`sha` | string | Git SHA of the merge commit for PR #8 on top of PR #7, which was later pushed to `main` = `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+`head_ref` | string | `""` (empty string)
+`base_ref` | string | `""` (empty string)
+`event_name` | string | `"push"`
+`ref_name` | string | `"gh-readonly-queue/main/pr-8-061c9387c245a237e608cffb69999a9e564d2ffa"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`after` | string | Same as `github.sha` = `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+`before` | string | `"0000000000000000000000000000000000000000"`
+`commits` | array | Array containing the `head_commit` object
+`compare` | string | URL to view commit `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+`forced` | boolean | `false`
+`head_commit` | object | Commit object for `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+`pusher` | object | `{"email": null, "name": "github-merge-queue[bot]"}`
+`ref` | string | `"refs/heads/gh-readonly-queue/main/pr-8-061c9387c245a237e608cffb69999a9e564d2ffa"`
+
+### `push` to `main` associated with PR #8
+
+`github` property | Type | Value
+--- | --- | ---
+`ref` | string | `"refs/heads/main"`
+`sha` | string | Git SHA of the merge commit for PR #8 on top of PR #7 = `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+`head_ref` | string | `""` (empty string)
+`base_ref` | string | `""` (empty string)
+`event_name` | string | `"push"`
+`ref_name` | string | `"main"`
+`ref_type` | string | `"branch"`
+
+`github.event` property | Type | Value
+--- | --- | ---
+`after` | string | Same as `github.sha` = `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+`before` | string | Git SHA of `main` before the push = `"d49b56145b99c35fcabcbdc1293bfe4500a660f8"`
+`commits` | array | Array containing the `head_commit` object
+`compare` | string | URL to compare from `"d49b56145b99c35fcabcbdc1293bfe4500a660f8"` to `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+`forced` | boolean | `false`
+`head_commit` | object | Commit object for `"eaa88899f4e18417ab4ddf1e39ad9d7f10c92fc1"`
+`pusher` | object | `{"email": null, "name": "github-merge-queue[bot]"}`
+`ref` | string | `"refs/heads/main"`
