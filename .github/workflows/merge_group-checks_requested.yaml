@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Event context info
         run: |
-          cat <<EOF
+          cat <<'EOF'
           github: ${{toJSON(github)}}
           env: ${{toJSON(env)}}
           vars: ${{toJSON(vars)}}
@@ -24,5 +24,3 @@ jobs:
           needs: ${{toJSON(needs)}}
           inputs: ${{toJSON(inputs)}}
           EOF
-      - name: Sleep to ensure overlapping workflows
-        run: sleep 30

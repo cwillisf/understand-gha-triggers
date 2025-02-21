@@ -35,7 +35,7 @@ make_workflow () {
 		echo "    steps:"
 		echo "      - name: Event context info"
 		echo "        run: |"
-		echo "          cat <<EOF"
+		echo "          cat <<'EOF'"
 		echo "          github: \${{toJSON(github)}}"
 		echo "          env: \${{toJSON(env)}}"
 		echo "          vars: \${{toJSON(vars)}}"

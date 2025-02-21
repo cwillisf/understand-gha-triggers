@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Event context info
         run: |
-          cat <<EOF
+          cat <<'EOF'
           github: ${{toJSON(github)}}
           env: ${{toJSON(env)}}
           vars: ${{toJSON(vars)}}
