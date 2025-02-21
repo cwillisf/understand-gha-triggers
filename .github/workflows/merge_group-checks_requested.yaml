@@ -24,3 +24,5 @@ jobs:
           needs: ${{toJSON(needs)}}
           inputs: ${{toJSON(inputs)}}
           EOF
+      - name: Sleep to ensure overlapping workflows
+        run: sleep 30
